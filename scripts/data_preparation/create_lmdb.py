@@ -155,6 +155,63 @@ def prepare_keys_vimeo90k(folder_path, train_list_path, mode):
     return img_path_list, keys
 
 
+def create_lmdb_for_oct():
+    """Create lmdb files for Unpaired_dataset OCT dataset.
+
+    Usage:
+        Typically, 
+
+            * resol_3d8_10
+            * resol_5_15
+            * resol_6_16
+            * resol_16_40
+
+        Remember to modify opt configurations according to your settings.
+    """
+    # resol_3d8_10 images
+    # 'datasets/Unpaired_dataset/resol_3d8_10'
+    folder_path = '../OCT_data/Unpaired_dataset/resol_3d8_10'
+    lmdb_path = '../OCT_data/Unpaired_dataset/resol_3d8_10.lmdb'
+    img_path_list, keys = prepare_keys_oct(folder_path)
+    make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
+
+    # resol_5_15 images
+    folder_path = '../OCT_data/Unpaired_dataset/resol_5_15'
+    lmdb_path = '../OCT_data/Unpaired_dataset/resol_5_15.lmdb'
+    img_path_list, keys = prepare_keys_oct(folder_path)
+    make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
+
+    # resol_6_16 images
+    folder_path = '../OCT_data/Unpaired_dataset/resol_6_16'
+    lmdb_path = '../OCT_data/Unpaired_dataset/resol_6_16.lmdb'
+    img_path_list, keys = prepare_keys_oct(folder_path)
+    make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
+
+    # resol_16_40 images
+    folder_path = '../OCT_data/Unpaired_dataset/resol_16_40'
+    lmdb_path = '../OCT_data/Unpaired_dataset/resol_16_40.lmdb'
+    img_path_list, keys = prepare_keys_oct(folder_path)
+    make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
+
+    
+
+def prepare_keys_oct(folder_path, train_list_path, mode):
+    """Prepare image path list and keys for DIV2K dataset.
+
+    Args:
+        folder_path (str): Folder path.
+
+    Returns:
+        list[str]: Image path list.
+        list[str]: Key list.
+    """
+    print('Reading image path list ...')
+    img_path_list = sorted(list(scandir(folder_path, suffix='png', recursive=False)))
+    keys = [img_path.split('.png')[0] for img_path in sorted(img_path_list)]
+
+    return img_path_list, keys
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -170,5 +227,7 @@ if __name__ == '__main__':
         create_lmdb_for_reds()
     elif dataset == 'vimeo90k':
         create_lmdb_for_vimeo90k()
+    elif dataset == 'oct':
+        create_lmdb_for_oct
     else:
         raise ValueError('Wrong dataset.')

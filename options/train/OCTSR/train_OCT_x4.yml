@@ -1,0 +1,191 @@
+# general settings
+name: OCT_BasicSR
+model_type: OCTDegSRModel
+scale: 4
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 0
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: OCTX4
+    type: UnpairedOCTDataset
+    dataroot_gt: datasets/Unpaired_dataset/resol_3d8_10
+    dataroot_lq: datasets/Unpaired_dataset/resol_16_40
+    io_backend:
+      type: disk
+
+    gt_size: 128
+    use_flip: true
+    use_rot: false
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 3
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 10
+    prefetch_mode: ~
+
+  val:
+    name: OCT5_15
+    type: SingleOCTDataset
+    dataroot_gt: datasets/Unpaired_dataset/resol_5_15
+    io_backend:
+      type: disk
+
+#### network structures
+networks:
+  netDeg:
+    which_network: DegModel
+    setting:
+      scale: 4
+      nc_img: 1
+      kernel_opt:
+        spatial: true
+        nc: 1
+        nf: 64
+        nb: 8
+        head_k: 1
+        body_k: 1
+        ksize: 21
+        zero_init: true
+      noise_opt: 
+        spatial: true
+        nc: 1
+        nf: 32
+        nb: 8
+        head_k: 3
+        body_k: 3
+        dim: 1
+        zero_init: false
+    pretrain: 
+      path: ~
+      strict_load: true
+
+  netSR:
+    which_network: EDSR
+    setting:
+      nf: 64
+      nb: 16
+      res_scale: 1
+      upscale: 4
+    pretrain: 
+      path: ../../../checkpoints/EDSR/edsr_baseline_x4-new.pt
+      strict_load: true
+  
+  netD1:
+    which_network: PatchGANDiscriminator
+    setting:
+      in_c: 1
+      nf: 64
+      nb: 3
+      stride: 1
+    pretrain: 
+      path: ~
+      strict_load: true
+
+  netD2:
+    which_network: PatchGANDiscriminator
+    setting:
+      in_c: 1
+      nf: 64
+      nb: 3
+      stride: 1
+    pretrain:
+      path: ~
+      strict_load: true
+      
+#### training settings: learning rate scheme, loss
+train:
+  resume_state: ~
+  D_ratio: 1
+  max_grad_norm: 50
+  buffer_size: 0
+
+  optim_deg: true
+  optim_sr: true
+  
+  losses:
+
+    sr_pix_sr: 
+      type: L1Loss
+      weight: 1.0
+    
+    noise_mean:
+      type: MSELoss
+      weight: 1.0
+    
+    lr_adv:
+      type: GANLoss
+      gan_type: lsgan
+      real_label_val: 1.0
+      fake_label_val: 0.0
+      weight: !!float 0.05
+
+    sr_adv:
+      type: GANLoss
+      gan_type: lsgan
+      real_label_val: 1.0
+      fake_label_val: 0.0
+      weight: !!float 0.05
+    
+    sr_percep:
+      type: PerceptualLoss
+      layer_weights:
+        'conv5_4': 1  # before relu
+      vgg_type: vgg19
+      use_input_norm: true
+      range_norm: false
+      perceptual_weight: 1.0
+      style_weight: 0
+      criterion: l1
+      weight: !!float 0.05
+
+  optimizers:
+    default:
+      type: Adam
+      lr: !!float 2e-4
+    netDeg: ~
+    netSR: ~
+    netD2: ~
+    netD1: ~
+
+  niter: 200000
+  warmup_iter: -1  # no warm up
+
+  schedulers:
+    default:
+      type: MultiStepRestartLR
+      milestones: [50000, 100000, 150000]
+      gamma: 0.5
+
+  manual_seed: 0
+  val_freq: !!float 5e3
+
+# validation settings
+val:
+  val_freq: !!float 5e3
+  save_img: false
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 4
+      test_y_channel: false
+    niqe:
+      type: calculate_niqe
+      crop_border: 4
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 5e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500

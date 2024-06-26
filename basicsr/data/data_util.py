@@ -91,7 +91,6 @@ def generate_frame_indices(crt_idx, max_frame_num, num_frames, padding='reflecti
         indices.append(pad_idx)
     return indices
 
-
 def paired_paths_from_lmdb(folders, keys):
     """Generate paired paths from lmdb files.
 
@@ -144,6 +143,7 @@ def paired_paths_from_lmdb(folders, keys):
         input_lmdb_keys = [line.split('.')[0] for line in fin]
     with open(osp.join(gt_folder, 'meta_info.txt')) as fin:
         gt_lmdb_keys = [line.split('.')[0] for line in fin]
+    # Check if the two meta_info are the same. TODO:
     if set(input_lmdb_keys) != set(gt_lmdb_keys):
         raise ValueError(f'Keys in {input_key}_folder and {gt_key}_folder are different.')
     else:
