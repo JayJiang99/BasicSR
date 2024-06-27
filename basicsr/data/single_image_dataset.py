@@ -56,9 +56,13 @@ class SingleImageDataset(data.Dataset):
         # color space transform
         if 'color' in self.opt and self.opt['color'] == 'y':
             img_lq = rgb2ycbcr(img_lq, y_only=True)[..., None]
-
+            
         # BGR to RGB, HWC to CHW, numpy to tensor
-        img_lq = img2tensor(img_lq, bgr2rgb=True, float32=True)
+        if len(img_lq) == 3 & (img_lq.shape(2) == 1):
+            img_lq = img2tensor(img_lq, bgr2rgb=False, float32=True)
+        else:
+            img_lq = img2tensor(img_lq, bgr2rgb=True, float32=True)
+        
         # normalize
         if self.mean is not None or self.std is not None:
             normalize(img_lq, self.mean, self.std, inplace=True)

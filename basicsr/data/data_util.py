@@ -232,6 +232,77 @@ def paired_paths_from_folder(folders, keys, filename_tmpl):
         paths.append(dict([(f'{input_key}_path', input_path), (f'{gt_key}_path', gt_path)]))
     return paths
 
+def unpaired_paths_from_lmdb(folders, keys):
+    """Generate unpaired paths from lmdb files.
+
+    Contents of lmdb. Taking the `lq.lmdb` for example, the file structure is:
+
+    ::
+
+        lq.lmdb
+        ├── data.mdb
+        ├── lock.mdb
+        ├── meta_info.txt
+
+    The data.mdb and lock.mdb are standard lmdb files and you can refer to
+    https://lmdb.readthedocs.io/en/release/ for more details.
+
+    The meta_info.txt is a specified txt file to record the meta information
+    of our datasets. It will be automatically created when preparing
+    datasets by our provided dataset tools.
+    Each line in the txt file records
+    1)image name (with extension),
+    2)image shape,
+    3)compression level, separated by a white space.
+    Example: `baboon.png (120,125,3) 1`
+
+    We use the image name without extension as the lmdb key.
+    Note that we use the same key for the corresponding lq and gt images.
+
+    Args:
+        folders (list[str]): A list of folder path. The order of list should
+            be [input_folder, gt_folder].
+        keys (list[str]): A list of keys identifying folders. The order should
+            be in consistent with folders, e.g., ['lq', 'gt'].
+            Note that this key is different from lmdb keys.
+
+    Returns:
+        list[str]: Returned path list.
+    """
+    assert len(folders) == 2, ('The len of folders should be 2 with [input_folder, gt_folder]. '
+                               f'But got {len(folders)}')
+    assert len(keys) == 2, f'The len of keys should be 2 with [input_key, gt_key]. But got {len(keys)}'
+    input_folder, gt_folder = folders
+    input_key, gt_key = keys
+
+    if not (input_folder.endswith('.lmdb') and gt_folder.endswith('.lmdb')):
+        raise ValueError(f'{input_key} folder and {gt_key} folder should both in lmdb '
+                         f'formats. But received {input_key}: {input_folder}; '
+                         f'{gt_key}: {gt_folder}')
+    # ensure that the two meta_info files are the same
+    with open(osp.join(input_folder, 'meta_info.txt')) as fin:
+        input_lmdb_keys = [line.split('.')[0] for line in fin]
+    with open(osp.join(gt_folder, 'meta_info.txt')) as fin:
+        gt_lmdb_keys = [line.split('.')[0] for line in fin]
+    input_paths = []
+    gt_paths = []
+    for lmdb_key_input in sorted(input_lmdb_keys):
+        input_paths.append((f'{input_key}_path', lmdb_key_input))
+    for lmdb_key_gt in sorted(gt_lmdb_keys):
+        gt_paths.append((f'{gt_key}_path', lmdb_key_gt))
+    return gt_paths, input_paths
+    
+
+    # # Check if the two meta_info are the same. TODO:
+    # if set(input_lmdb_keys) != set(gt_lmdb_keys):
+    #     raise ValueError(f'Keys in {input_key}_folder and {gt_key}_folder are different.')
+    # else:
+    #     paths = []
+    #     for lmdb_key in sorted(input_lmdb_keys):
+    #         paths.append(dict([(f'{input_key}_path', lmdb_key), (f'{gt_key}_path', lmdb_key)]))
+    #     return paths
+
+
 
 def paths_from_folder(folder):
     """Generate paths from folder.

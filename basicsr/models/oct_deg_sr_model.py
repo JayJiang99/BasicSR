@@ -6,7 +6,8 @@ import torch
 import torch.nn as nn
 from kornia.color import rgb_to_grayscale
 
-from utils.registry import MODEL_REGISTRY
+from basicsr.utils.registry import MODEL_REGISTRY
+from basicsr.archs import build_network
 
 from .base_model import BaseModel
 
@@ -35,14 +36,14 @@ class Quantization(nn.Module):
 @MODEL_REGISTRY.register()
 class OCTDegSRModel(BaseModel):
     def __init__(self, opt):
-        super().__init__(opt)
+        super(OCTDegSRModel, self).__init__(opt)
         if opt["dist"]:
             self.rank = torch.distributed.get_rank()
         else:
             self.rank = -1  # non dist training
-
+        # TODO: should be adjusted
         self.data_names = ["src", "tgt"]
-
+        # TODO: should be adjusted
         self.network_names = ["netDeg", "netSR", "netD1", "netD2"]
         self.networks = {}
 
@@ -67,7 +68,7 @@ class OCTDegSRModel(BaseModel):
         assert set(defined_network_names).issubset(set(self.network_names))
         
         for name in defined_network_names:
-            setattr(self, name, self.build_network(nets_opt[name]))
+            setattr(self, name, build_network(nets_opt[name]))
             self.networks[name] = getattr(self, name)
             
         if self.is_train:
@@ -98,10 +99,15 @@ class OCTDegSRModel(BaseModel):
             self.predicted_kernel,
             self.predicted_noise,
          ) = self.netDeg(self.syn_hr)
+        if self.fake_real_lr.size(1) == 1:
+            # repeat it to be 3 channel for the sr model
+            self.fake_real_lr = self.fake_real_lr.repeat(1,3,1,1)
         # use netSR to get the SR image from the fake lr
         if self.losses.get("sr_pix_trans"):
             self.fake_real_lr_quant = self.quant(self.fake_real_lr)
             self.syn_sr = self.netSR(self.fake_real_lr_quant)
+            if self.syn_sr.size(1) == 3:
+                self.syn_sr = rgb_to_grayscale(self.syn_sr)
     
     def sr_forward(self):
         # Similar to the above deg_forward. WHY TODO:
@@ -111,9 +117,14 @@ class OCTDegSRModel(BaseModel):
                 self.predicted_kernel,
                 self.predicted_noise,
             ) = self.netDeg(self.syn_hr)
+        if self.fake_real_lr.size(1) == 1:
+            # repeat it to be 3 channel for the sr model
+            self.fake_real_lr = self.fake_real_lr.repeat(1,3,1,1)
 
         self.fake_real_lr_quant = self.quant(self.fake_real_lr)
         self.syn_sr = self.netSR(self.fake_real_lr_quant.detach())
+        if self.syn_sr.size(1) == 3:
+                self.syn_sr = rgb_to_grayscale(self.syn_sr)
     
     def optimize_trans_models(self, step, loss_dict):
 
@@ -253,8 +264,14 @@ class OCTDegSRModel(BaseModel):
     
     def calculate_gan_loss_D(self, netD, criterion, real, fake):
 
-        d_pred_fake = netD(fake.detach())
-        d_pred_real = netD(real)
+        if fake.size(1) == 3:
+            d_pred_fake = netD(fake[:,1,:,:].unsqueeze(1).detach())
+        else:
+            d_pred_fake = netD(fake.detach())
+        if real.size(1) == 3:
+            d_pred_real = netD(real[:,1,:,:].unsqueeze(1))    
+        else:
+            d_pred_real = netD(real)
 
         loss_real = criterion(d_pred_real, True, is_disc=True)
         loss_fake = criterion(d_pred_fake, False, is_disc=True)
@@ -263,7 +280,12 @@ class OCTDegSRModel(BaseModel):
 
     def calculate_gan_loss_G(self, netD, criterion, real, fake):
 
-        d_pred_fake = netD(fake)
+        # if fake.size(1) == 3:
+        #     fake = fake.mean(dim=1, keepdim=True)
+        if fake.size(1) == 3:
+            d_pred_fake = netD(fake.mean(dim=1, keepdim=True))
+        else:
+            d_pred_fake = netD(fake)
         loss_real = criterion(d_pred_fake, True, is_disc=False)
 
         return loss_real
@@ -276,7 +298,13 @@ class OCTDegSRModel(BaseModel):
         self.set_network_state(["netSR"], "eval")
         with torch.no_grad():
             if crop_size is None:
-                self.fake_tgt = self.netSR(self.src)
+                if self.src.size(1) == 1:
+                    self.fake_tgt = self.netSR(self.src.repeat(1,3,1,1))
+                else:
+                    self.fake_tgt = self.netSR(self.src)
+
+                if self.fake_tgt.size(1) == 3:
+                    self.fake_tgt = rgb_to_grayscale(self.fake_tgt)
             else:
                 self.fake_tgt = self.crop_test(self.src, crop_size)
         self.set_network_state(["netSR"], "train")
@@ -308,6 +336,8 @@ class OCTDegSRModel(BaseModel):
             for ws in w_start:
                 lr_patch = lr[:, :, hs: hs+crop_size, ws: ws+crop_size]
                 sr_patch = self.netSR(lr_patch)
+                if sr_patch.size(1) == 3:
+                    sr_patch = rgb_to_grayscale(sr_patch)
 
                 sr1[:, :, 
                     int(hs*scale):int((hs+crop_size)*scale),
@@ -322,6 +352,10 @@ class OCTDegSRModel(BaseModel):
             for wd in w_end:
                 lr_patch = lr[:, :, hd-crop_size:hd, wd-crop_size:wd]
                 sr_patch = self.netSR(lr_patch)
+                if sr_patch.size(1) == 3:
+                    sr_patch = rgb_to_grayscale(sr_patch)
+
+                
 
                 sr2[:, :, 
                     int((hd-crop_size)*scale):int(hd*scale),

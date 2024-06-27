@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 
-from utils.registry import ARCH_REGISTRY
+from basicsr.utils.registry import ARCH_REGISTRY
 
 
 class ResBlock(nn.Module):
@@ -35,7 +35,7 @@ class Quantization(nn.Module):
 
 class KernelModel(nn.Module):
     def __init__(self, opt, scale):
-        super().__init__()
+        super(KernelModel, self).__init__()
         # kernel should be spatially variant
 
         self.opt = opt
@@ -56,6 +56,7 @@ class KernelModel(nn.Module):
             in_nc = nc
 
         deg_kernel = [
+            # TODO: check if this way to generate zk is proper
             nn.Conv2d(in_nc, nf, head_k, 1, head_k//2),
             nn.BatchNorm2d(nf), nn.ReLU(True),
             *[
@@ -63,6 +64,7 @@ class KernelModel(nn.Module):
                 for _ in range(nb)
                 ],
             nn.Conv2d(nf, ksize ** 2, 1, 1, 0),
+            # TODO: check whether it should be sum to 1 for each kernel not the whole
             nn.Softmax(1)
         ]
         self.deg_kernel = nn.Sequential(*deg_kernel)
@@ -81,7 +83,8 @@ class KernelModel(nn.Module):
 
         if self.opt["nc"] > 0:
             if self.opt["spatial"]:
-                zk = torch.randn(B, self.opt["nc"], H, W).to(x.device)
+                # for each axial, the kernel should be variant. For different axial, the kernel should be invariant.
+                zk = torch.randn(B, self.opt["nc"], h, w).to(x.device)
             else:
                 zk = torch.randn(B, self.opt["nc"], 1, 1).to(x.device)
                 if self.opt["mix"]:
@@ -96,21 +99,28 @@ class KernelModel(nn.Module):
             inp = zk          
         
         ksize = self.opt["ksize"]
-        kernel = self.deg_kernel(inp).view(B, 1, ksize**2, *inp.shape[2:])
+        kernel = self.deg_kernel(inp)
+        # print(kernel.shape)
+        # TODO: comment
+        # kernel = kernel.repeat(1, 1, 1, w)
+        kernel = kernel.view(B, 1, ksize**2, h, w)
 
         x = x.view(B*C, 1, H, W)
+        # print(x.shape)
+        # print(kernel.shape)
         x = F.unfold(
             self.pad(x), kernel_size=ksize, stride=self.scale, padding=0
         ).view(B, C, ksize**2, h, w)
+        # print(x.shape)
 
         x = torch.mul(x, kernel).sum(2).view(B, C, h, w)
-        kernel = kernel.view(B, ksize, ksize, *inp.shape[2:]).squeeze()
+        kernel = kernel.view(B, ksize, ksize, h,w).squeeze()
 
         return x, kernel
 
 class NoiseModel(nn.Module):
     def __init__(self, opt, scale):
-        super().__init__()
+        super(NoiseModel, self).__init__()
 
         self.scale = scale
         self.opt = opt
@@ -138,13 +148,30 @@ class NoiseModel(nn.Module):
             nn.Conv2d(nf, opt["dim"], 1, 1, 0),
         ]
         self.deg_noise = nn.Sequential(*deg_noise)
+        # add oct noise:
+        deg_shot_noise = [
+            nn.Conv2d(in_nc, nf, head_k, 1, head_k//2),
+            nn.BatchNorm2d(nf), nn.ReLU(True),
+            *[
+                ResBlock(nf=nf, ksize=body_k)
+                for _ in range(nb)
+                ],
+            nn.Conv2d(nf, opt["dim"], 1, 1, 0),
+        ]
+        self.deg_shot_noise = nn.Sequential(*deg_shot_noise)
+
+
 
         if opt["zero_init"]:
             nn.init.constant_(self.deg_noise[-1].weight, 0)
             nn.init.constant_(self.deg_noise[-1].bias, 0)
+            nn.init.constant_(self.deg_shot_noise[-1].weight, 0)
+            nn.init.constant_(self.deg_shot_noise[-1].bias, 0)
         else:
             nn.init.normal_(self.deg_noise[-1].weight, 0.001)
             nn.init.constant_(self.deg_noise[-1].bias, 0)
+            nn.init.normal_(self.deg_shot_noise[-1].weight, 0.001)
+            nn.init.constant_(self.deg_shot_noise[-1].bias, 0)
     
     def forward(self, x):
         B, C, H, W = x.shape
@@ -165,30 +192,30 @@ class NoiseModel(nn.Module):
         else:
             inp = zn
             
-        noise = self.deg_noise(inp)
+        noise = self.deg_noise(inp)+self.deg_shot_noise(inp)*x
 
         return noise
 
 @ARCH_REGISTRY.register()
 class OCTDegModel(nn.Module):
     def __init__(
-        self,  scale = 2, nc_img=1, kernel_opt=None, noise_opt=None
+        self,  scale = 2, num_in_ch=1, kernel_opt=None, noise_opt=None
     ):
-        super().__init__()
+        super(OCTDegModel, self).__init__()
 
         self.scale = scale
 
         self.kernel_opt = kernel_opt
-        # self.noise_opt = noise_opt
+        self.noise_opt = noise_opt
 
         if kernel_opt is not None:
             self.deg_kernel = KernelModel(kernel_opt, scale)
         
-        # if noise_opt is not None:
-        #    self.deg_noise = NoiseModel(noise_opt, scale)
+        if noise_opt is not None:
+           self.deg_noise = NoiseModel(noise_opt, scale)
 
-        # else:
-        #     self.quant = Quantization()
+        else:
+            self.quant = Quantization()
         
     def forward(self, inp):
         B, C, H, W = inp.shape
@@ -202,12 +229,12 @@ class OCTDegModel(nn.Module):
             x = F.interpolate(inp, scale_factor=1/self.scale, mode="bicubic", align_corners=False)
             kernel = None
 
-        # # noise
-        # if self.noise_opt is not None:
-        #     noise = self.deg_noise(x.detach())
-        #     x = x + noise
-        # else:
-        #     noise = None
-        #     x = self.quant(x)
-        return x, kernel
+        # noise
+        if self.noise_opt is not None:
+            noise = self.deg_noise(x.detach())
+            x = x + noise
+        else:
+            noise = None
+            x = self.quant(x)
+        return x, kernel, noise
 

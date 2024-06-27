@@ -1,99 +1,103 @@
-# general settings
-name: OCT_BasicSR
+#### general settings
+name: OCTData1
 model_type: OCTDegSRModel
 scale: 4
-num_gpu: 1  # set num_gpu: 0 for cpu mode
+num_gpu: auto  # auto: can infer from your visible devices automatically. official: 4 GPUs
 manual_seed: 0
 
-# dataset and data loader settings
+
+#### datasets
 datasets:
   train:
     name: OCTX4
     type: UnpairedOCTDataset
-    dataroot_gt: datasets/Unpaired_dataset/resol_3d8_10
-    dataroot_lq: datasets/Unpaired_dataset/resol_16_40
     io_backend:
-      type: disk
+      type: lmdb
+    color: Gray
+    ratios: [200, 200]
 
+    dataroot_gt: D:/zhiyi/OCT_SR/OCT_data/Unpaired_dataset/resol_3d8_10.lmdb
+    dataroot_lq: D:/zhiyi/OCT_SR/OCT_data/Unpaired_dataset/resol_16_40.lmdb
+
+    
     gt_size: 128
-    use_flip: true
-    use_rot: false
+    # lq_size: 32
+    use_hflip: True
+    use_rot: False
 
     # data loader
-    use_shuffle: true
-    num_worker_per_gpu: 3
-    batch_size_per_gpu: 16
-    dataset_enlarge_ratio: 10
+    num_worker_per_gpu: 5
+    batch_size_per_gpu: 12
+    dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
-  val:
-    name: OCT5_15
-    type: SingleOCTDataset
-    dataroot_gt: datasets/Unpaired_dataset/resol_5_15
-    io_backend:
-      type: disk
+  # val:
+  #   name: OCT16_40_val
+  #   type: SingleImageDataset
+  #   io_backend:
+  #     type: lmdb
+  #   color: Gray
+  #   dataroot_lq: D:/zhiyi/OCT_SR/OCT_data/Unpaired_dataset/resol_16_40_crop_val.lmdb
 
 #### network structures
 networks:
   netDeg:
-    which_network: DegModel
-    setting:
-      scale: 4
-      nc_img: 1
-      kernel_opt:
-        spatial: true
-        nc: 1
-        nf: 64
-        nb: 8
-        head_k: 1
-        body_k: 1
-        ksize: 21
-        zero_init: true
-      noise_opt: 
-        spatial: true
-        nc: 1
-        nf: 32
-        nb: 8
-        head_k: 3
-        body_k: 3
-        dim: 1
-        zero_init: false
-    pretrain: 
-      path: ~
-      strict_load: true
+    type: OCTDegModel
+    scale: 4
+    num_in_ch: 1
+    kernel_opt:
+      spatial: true
+      nc: 1
+      nf: 64
+      nb: 8
+      head_k: 1
+      body_k: 1
+      ksize: 11
+      zero_init: true
+    noise_opt: 
+      spatial: true
+      nc: 1
+      nf: 32
+      nb: 8
+      head_k: 3
+      body_k: 3
+      dim: 1
+      zero_init: true
+
 
   netSR:
-    which_network: EDSR
-    setting:
-      nf: 64
-      nb: 16
-      res_scale: 1
-      upscale: 4
-    pretrain: 
-      path: ../../../checkpoints/EDSR/edsr_baseline_x4-new.pt
-      strict_load: true
+    type: EDSR
+    num_in_ch: 1
+    num_out_ch: 1
+    num_feat: 256
+    num_block: 32
+    upscale: 4
+    res_scale: 1
+    img_range: 255.
+    # rgb_mean: [0.4488, 0.4371, 0.4040]
   
   netD1:
-    which_network: PatchGANDiscriminator
-    setting:
-      in_c: 1
-      nf: 64
-      nb: 3
-      stride: 1
-    pretrain: 
-      path: ~
-      strict_load: true
+    type: PatchGANDiscriminator
+    num_in_ch: 1
+    num_feat: 64
+    num_b: 3
+    stride: 1
+
 
   netD2:
-    which_network: PatchGANDiscriminator
-    setting:
-      in_c: 1
-      nf: 64
-      nb: 3
-      stride: 1
-    pretrain:
-      path: ~
-      strict_load: true
+    type: PatchGANDiscriminator
+    num_in_ch: 1
+    num_feat: 64
+    num_b: 3
+    stride: 1
+
+# # path
+# path:
+#   # use the pre-trained Real-ESRNet model
+#   pretrain_network_g: experiments/pretrained_models/RealESRNet_x2plus.pth
+#   param_key_g: params_ema
+#   strict_load_g: true
+#   resume_state: ~
       
 #### training settings: learning rate scheme, loss
 train:
@@ -106,7 +110,6 @@ train:
   optim_sr: true
   
   losses:
-
     sr_pix_sr: 
       type: L1Loss
       weight: 1.0
@@ -162,30 +165,7 @@ train:
   manual_seed: 0
   val_freq: !!float 5e3
 
-# validation settings
-val:
-  val_freq: !!float 5e3
-  save_img: false
-
-  metrics:
-    psnr: # metric name, can be arbitrary
-      type: calculate_psnr
-      crop_border: 4
-      test_y_channel: false
-    niqe:
-      type: calculate_niqe
-      crop_border: 4
-
-# logging settings
+#### logger
 logger:
   print_freq: 100
   save_checkpoint_freq: !!float 5e3
-  use_tb_logger: true
-  wandb:
-    project: ~
-    resume_id: ~
-
-# dist training settings
-dist_params:
-  backend: nccl
-  port: 29500
