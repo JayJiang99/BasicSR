@@ -2,7 +2,7 @@
 name: OCTData1
 model_type: OCTDegSRModel
 scale: 4
-num_gpu: auto  # auto: can infer from your visible devices automatically. official: 4 GPUs
+num_gpu: 2  # auto: can infer from your visible devices automatically. official: 4 GPUs
 manual_seed: 0
 
 
@@ -14,10 +14,10 @@ datasets:
     io_backend:
       type: lmdb
     color: Gray
-    ratios: [200, 200]
+    ratios: [10, 10]
 
-    dataroot_gt: D:/zhiyi/OCT_SR/OCT_data/Unpaired_dataset/resol_3d8_10.lmdb
-    dataroot_lq: D:/zhiyi/OCT_SR/OCT_data/Unpaired_dataset/resol_16_40.lmdb
+    dataroot_gt: /home/data/OCT_data/Unpaired_dataset/resol_3d8_10.lmdb
+    dataroot_lq: /home/data/OCT_data/Unpaired_dataset/resol_16_40.lmdb
 
     
     gt_size: 128
@@ -26,18 +26,18 @@ datasets:
     use_rot: False
 
     # data loader
-    num_worker_per_gpu: 5
-    batch_size_per_gpu: 12
+    num_worker_per_gpu: 12
+    batch_size_per_gpu: 24
     dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
-  # val:
-  #   name: OCT16_40_val
-  #   type: SingleImageDataset
-  #   io_backend:
-  #     type: lmdb
-  #   color: Gray
-  #   dataroot_lq: D:/zhiyi/OCT_SR/OCT_data/Unpaired_dataset/resol_16_40_crop_val.lmdb
+  val:
+    name: OCT16_40_val
+    type: SingleImageDataset
+    io_backend:
+      type: lmdb
+    color: Gray
+    dataroot_lq: /home/data/OCT_data/Unpaired_dataset/resol_16_40.lmdb
 
 #### network structures
 networks:
@@ -47,6 +47,7 @@ networks:
     num_in_ch: 1
     kernel_opt:
       spatial: true
+      mix: false
       nc: 1
       nf: 64
       nb: 8
@@ -56,6 +57,7 @@ networks:
       zero_init: true
     noise_opt: 
       spatial: true
+      mix: false
       nc: 1
       nf: 32
       nb: 8
@@ -108,11 +110,16 @@ train:
 
   optim_deg: true
   optim_sr: true
+
+  scheduler:
+    type: MultiStepRestartLR
+    milestones: [50000, 100000, 200000, 300000]
+    gamma: 0.5
   
   losses:
     noise_mean:
       type: MSELoss
-      weight: 1.0
+      loss_weight: 1.0
     
     sr_pixel:
       type: L1Loss
@@ -150,23 +157,30 @@ train:
     default:
       type: Adam
       lr: !!float 2e-4
-    netDeg: ~
-    netSR: ~
-    netD2: ~
-    netD1: ~
+    network_deg: ~
+    net_g: ~
+    network_dis1: ~
+    network_dis2: ~
 
-  niter: 200000
+  total_iter: 200000
   warmup_iter: -1  # no warm up
 
-  scheduler:
-    type: MultiStepRestartLR
-    milestones: [50000, 100000, 200000, 300000]
-    gamma: 0.5
+  # scheduler:
+  #   type: MultiStepRestartLR
+  #   milestones: [50000, 100000, 200000, 300000]
+  #   gamma: 0.5
 
   manual_seed: 0
   val_freq: !!float 5e3
 
 #### logger
 logger:
-  print_freq: 100
+  print_freq: 2
   save_checkpoint_freq: !!float 5e3
+  use_tb_logger: true
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
+

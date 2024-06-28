@@ -48,6 +48,7 @@ def yaml_load(f):
         with open(f, 'r') as f:
             return yaml.load(f, Loader=ordered_yaml()[0])
     else:
+        print('error')
         return yaml.load(f, Loader=ordered_yaml()[0])
 
 
@@ -109,6 +110,7 @@ def parse_options(root_path, is_train=True):
 
     # parse yml to dict
     opt = yaml_load(args.opt)
+    print(opt['name'])
 
     # distributed settings
     if args.launcher == 'none':

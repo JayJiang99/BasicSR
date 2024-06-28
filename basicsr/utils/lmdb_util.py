@@ -147,6 +147,7 @@ def read_img_worker(path, key, compress_level):
     """
 
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+
     if img.ndim == 2:
         h, w = img.shape
         c = 1

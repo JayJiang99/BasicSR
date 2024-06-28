@@ -170,32 +170,32 @@ def create_lmdb_for_oct():
     """
     # resol_3d8_10 images
     # 'datasets/Unpaired_dataset/resol_3d8_10'
-    folder_path = '../OCT_data/Unpaired_dataset/resol_3d8_10'
-    lmdb_path = '../OCT_data/Unpaired_dataset/resol_3d8_10.lmdb'
+    folder_path = '../data/OCT_data/Unpaired_dataset/resol_3d8_10'
+    lmdb_path = '../data/OCT_data/Unpaired_dataset/resol_3d8_10.lmdb'
     img_path_list, keys = prepare_keys_oct(folder_path)
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
 
     # resol_5_15 images
-    folder_path = '../OCT_data/Unpaired_dataset/resol_5_15'
-    lmdb_path = '../OCT_data/Unpaired_dataset/resol_5_15.lmdb'
+    folder_path = '../data/OCT_data/Unpaired_dataset/resol_5_15'
+    lmdb_path = '../data/OCT_data/Unpaired_dataset/resol_5_15.lmdb'
     img_path_list, keys = prepare_keys_oct(folder_path)
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
 
     # resol_6_16 images
-    folder_path = '../OCT_data/Unpaired_dataset/resol_6_16'
-    lmdb_path = '../OCT_data/Unpaired_dataset/resol_6_16.lmdb'
+    folder_path = '../data/OCT_data/Unpaired_dataset/resol_6_16'
+    lmdb_path = '../data/OCT_data/Unpaired_dataset/resol_6_16.lmdb'
     img_path_list, keys = prepare_keys_oct(folder_path)
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
 
     # resol_16_40 images
-    folder_path = '../OCT_data/Unpaired_dataset/resol_16_40'
-    lmdb_path = '../OCT_data/Unpaired_dataset/resol_16_40.lmdb'
+    folder_path = '../data/OCT_data/Unpaired_dataset/resol_16_40'
+    lmdb_path = '../data/OCT_data/Unpaired_dataset/resol_16_40.lmdb'
     img_path_list, keys = prepare_keys_oct(folder_path)
     make_lmdb_from_imgs(folder_path, lmdb_path, img_path_list, keys)
 
     
 
-def prepare_keys_oct(folder_path, train_list_path, mode):
+def prepare_keys_oct(folder_path):
     """Prepare image path list and keys for DIV2K dataset.
 
     Args:
@@ -228,6 +228,6 @@ if __name__ == '__main__':
     elif dataset == 'vimeo90k':
         create_lmdb_for_vimeo90k()
     elif dataset == 'oct':
-        create_lmdb_for_oct
+        create_lmdb_for_oct()
     else:
         raise ValueError('Wrong dataset.')

@@ -152,11 +152,13 @@ def train_pipeline(root_path):
     start_time = time.time()
 
     for epoch in range(start_epoch, total_epochs + 1):
+        print(f'Number of epoch: {epoch}')
         train_sampler.set_epoch(epoch)
         prefetcher.reset()
         train_data = prefetcher.next()
 
         while train_data is not None:
+            print('error:')
             data_timer.record()
 
             current_iter += 1
